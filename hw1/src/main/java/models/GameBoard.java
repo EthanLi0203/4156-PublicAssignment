@@ -1,5 +1,7 @@
 package models;
 
+import java.util.Arrays;
+
 public class GameBoard {
 
   private Player p1;
@@ -49,11 +51,14 @@ public void setTurn(int turn) {
 }
 
 public char[][] getBoardState() {
-	return boardState;
+	char[][] cp = boardState;
+	return cp;
 }
 
 public void setBoardState(char[][] boardState) {
-	this.boardState = boardState;
+	char[][] cp = boardState.clone();
+
+	this.boardState = cp;
 }
 
 public int getWinner() {

@@ -4,7 +4,6 @@ import io.javalin.Javalin;
 
 import models.*;
 
-import java.awt.desktop.SystemSleepEvent;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
@@ -12,14 +11,12 @@ import java.util.Queue;
 import org.eclipse.jetty.websocket.api.Session;
 import com.google.gson.*;
 
-class PlayGame {
+public class PlayGame {
 
   private static final int PORT_NUMBER = 8080;
 
   private static Javalin app;
-  
-  private static boolean gameStarted;
-  
+
   static GameBoard currGameBoard;
 
   /** Main method of the application.
@@ -39,8 +36,14 @@ class PlayGame {
     
     // new game
     app.get("/newgame", res ->{
+    	currGameBoard = new GameBoard();
     	res.redirect("/tictactoe.html");
     });
+
+    // get game board
+	  app.get("/gameboard", res -> {
+	  	res.result(gson.toJson(currGameBoard)).status(200);
+	  });
     
     // start game
     app.post("/startgame", ctx -> {
@@ -65,27 +68,44 @@ class PlayGame {
     
     // join game
     app.get("/joingame", ctx -> {
-    	char p2Type = currGameBoard.getP1().getType() == 'X' ? 'O' : 'X';
-    	Player player2 = new Player();
-    	player2.setId(2);
-    	player2.setType(p2Type);
-    	currGameBoard.setGameStarted(true);
-    	currGameBoard.setP2(player2);
-		String json = gson.toJson(currGameBoard);
-		sendGameBoardToAllPlayers(json);
-    	ctx.redirect("/tictactoe.html?p=2");
+    	boolean success = true;
+    	if(currGameBoard.getP1() == null){
+			Message mess = new Message();
+			mess.setMessage("Haven't start game yet...");
+			ctx.result(gson.toJson(mess));
+			success =false;
+		}
+		if(success){
+			char p2Type = currGameBoard.getP1().getType() == 'X' ? 'O' : 'X';
+			Player player2 = new Player();
+			player2.setId(2);
+			player2.setType(p2Type);
+			currGameBoard.setGameStarted(true);
+			currGameBoard.setP2(player2);
+			String json = gson.toJson(currGameBoard);
+			sendGameBoardToAllPlayers(json);
+			ctx.redirect("/tictactoe.html?p=2");
+		}
+
     });
     
     // player move
     app.post("/move/:playerId", ctx -> {
     	boolean successMove = true;
     	String playerId = ctx.pathParam("playerId");
-    	System.out.println("playerId: "+playerId+"  is moving");
+    	//System.out.println("playerId: "+playerId+"  is moving");
 		int X = ctx.body().split("&")[0].charAt(2) - '0';
 		int Y = ctx.body().split("&")[1].charAt(2) - '0';
+		if(!currGameBoard.isGameStarted()){
+			Message mess = new Message();
+			mess.setMoveValidity(false);
+			mess.setMessage("Game not started yet!");
+			successMove = false;
+			ctx.result(gson.toJson(mess));
+		}
     	currGameBoard.setGameStarted(true);
     	char[][] currBoard = currGameBoard.getBoardState();
-		System.out.println(currGameBoard.getTurn());
+		//System.out.println(currGameBoard.getTurn());
     	if(currBoard[X][Y] == 'X' || currBoard[X][Y] == 'O' || X < 0 || X > 2 || Y < 0 || Y > 2) {
     		ctx.result("Invalid move");
 		}
@@ -99,7 +119,7 @@ class PlayGame {
     		successMove = false;
 		}
 
-    	if(Integer.valueOf(playerId) != currGameBoard.getTurn()){
+    	if(Integer.parseInt(playerId) != currGameBoard.getTurn()){
     		message.setCode(102);
     		message.setMoveValidity(false);
     		String oppo = playerId.equals("1") ? "2" : "1";
@@ -129,6 +149,8 @@ class PlayGame {
 			Result res = checkBoard(currBoard);
 			if(res == Result.DRAW){
 				message.setMessage("This game draw");
+				message.setMoveValidity(true);
+				message.setCode(101);
 				String mes = gson.toJson(message);
 				currGameBoard.setDraw(true);
 				ctx.result(mes);
@@ -136,13 +158,20 @@ class PlayGame {
 			}else if(res == Result.O_WIN){
 				int winplayer = currGameBoard.getP1().getType() == 'O'? 1 : 2;
 				currGameBoard.setWinner(winplayer);
-				message.setMessage("Player "+ winplayer + "  win!");
+				message.setMoveValidity(true);
+				message.setMessage("Player "+ winplayer + " win!");
 				String mes = gson.toJson(message);
 				ctx.result(mes);
 			}else if(res == Result.X_WIN){
 				int winplayer = currGameBoard.getP1().getType() == 'X'? 1 : 2;
 				currGameBoard.setWinner(winplayer);
-				message.setMessage("Player "+ winplayer + "  win!");
+				message.setMoveValidity(true);
+				message.setMessage("Player "+ winplayer + " win!");
+				String mes = gson.toJson(message);
+				ctx.result(mes);
+			}else{
+				message.setMoveValidity(true);
+				message.setCode(200);
 				String mes = gson.toJson(message);
 				ctx.result(mes);
 			}
@@ -162,7 +191,7 @@ class PlayGame {
    */
   private static void sendGameBoardToAllPlayers(final String gameBoardJson) {
     Queue<Session> sessions = UiWebSocket.getSessions();
-    System.out.println(gameBoardJson);
+    //System.out.println(gameBoardJson);
     for (Session sessionPlayer : sessions) {
       try {
 //    	  System.out.println("sessionPlayer:   "+sessionPlayer);
